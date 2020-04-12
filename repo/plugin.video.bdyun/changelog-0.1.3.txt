@@ -1,7 +1,0 @@
-V0.1.3 2016-06-17
--修复播放高清视频时的错误
--Fix playing HD video bug
-
-V0.1.2 2016-06-16
--Fix UnicodeError 
-

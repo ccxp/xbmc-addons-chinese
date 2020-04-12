@@ -5,6 +5,8 @@ import os
 import sys
 import xbmc
 import urllib
+import urllib.parse
+import urllib.request
 import xbmcvfs
 import xbmcaddon
 import xbmcgui,xbmcplugin
@@ -20,10 +22,10 @@ __scriptname__ = __addon__.getAddonInfo('name')
 __version__    = __addon__.getAddonInfo('version')
 __language__   = __addon__.getLocalizedString
 
-__cwd__        = xbmc.translatePath( __addon__.getAddonInfo('path') ).decode("utf-8")
-__profile__    = xbmc.translatePath( __addon__.getAddonInfo('profile') ).decode("utf-8")
-__resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' ) ).decode("utf-8")
-__temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') ).decode("utf-8")
+__cwd__        = xbmc.translatePath( __addon__.getAddonInfo('path') )
+__profile__    = xbmc.translatePath( __addon__.getAddonInfo('profile') )
+__resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' ) )
+__temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') )
 
 sys.path.append (__resource__)
 
@@ -33,10 +35,6 @@ UserAgent  = 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)'
 
 def get_KodiVersion():
     json_query = xbmc.executeJSONRPC('{ "jsonrpc": "2.0", "method": "Application.GetProperties", "params": {"properties": ["version", "name"]}, "id": 1 }')
-    if sys.version_info[0] >= 3:
-        json_query = str(json_query)
-    else:
-        json_query = unicode(json_query, 'utf-8', errors='ignore')
     json_query = json.loads(json_query)
     version_installed = []
     if 'result' in json_query and 'version' in json_query['result']:
@@ -46,9 +44,7 @@ def get_KodiVersion():
 __kodi__ = get_KodiVersion()
 
 def log(module, msg):
-    if isinstance(msg,str):
-        msg = msg.decode('utf-8')
-    xbmc.log((u"%s::%s - %s" % (__scriptname__,module,msg,)).encode('utf-8'),level=xbmc.LOGDEBUG )
+    xbmc.log((u"%s::%s - %s" % (__scriptname__,module,msg,)),level=xbmc.LOGDEBUG )
 
 def session_get(url, id='', referer='', dtoken=''):
     log(sys._getframe().f_code.co_name, "url=%s id=%s referer=%s dtoken=%s" % (url, id, referer, dtoken))
@@ -88,7 +84,7 @@ def Search( item ):
                                            int(item['episode']))
     else:
         search_string = item['title']
-    url = SUBHD_API % (urllib.quote(search_string))
+    url = SUBHD_API % (urllib.parse.quote(search_string))
     data = session_get(url)
     try:
         soup = BeautifulSoup(data, "html.parser")
@@ -100,7 +96,7 @@ def Search( item ):
     # if can't find subtitle for the specified episode, try the whole season instead
     if (len(results) == 0) and (len(item['tvshow']) > 0):
         search_string = "%s S%.2d" % (item['tvshow'], int(item['season']))
-        url = SUBHD_API % (urllib.quote(search_string))
+        url = SUBHD_API % (urllib.parse.quote(search_string))
         data = session_get(url)
         try:
             soup = BeautifulSoup(data, "html.parser")
@@ -110,15 +106,15 @@ def Search( item ):
 
     for it in results:
         a = it.find('div', class_="f12 pt-1").a
-        link = SUBHD_BASE + a.get('href').encode('utf-8')
+        link = SUBHD_BASE + a.get('href')
         title = a.get('title') if a.get('title') else a.text
-        version = title.encode('utf-8')
+        version = title
         if version.find('本字幕按 ') == 0:
             version = version.split()[1]
 
         try:
             langs = it.find("div", class_="pt-1 text-secondary").text.split()
-            langs = [x.encode('utf-8') for x in langs][:-1]
+            langs = [x for x in langs][:-1]
         except:
             langs = '未知'
         name = '%s (%s)' % (version, ",".join(langs))
@@ -131,8 +127,8 @@ def Search( item ):
         for it in subtitles_list:
             listitem = xbmcgui.ListItem(label=it["language_name"],
                                         label2=it["filename"],
-                                        iconImage=it["rating"],
-                                        thumbnailImage=it["language_flag"]
+                                        #iconImage=it["rating"],
+                                        #thumbnailImage=it["language_flag"]
                                        )
 
             listitem.setProperty( "sync", "false" )
@@ -157,19 +153,19 @@ def Download(url,lang):
     try:
         data = session_get(url)
         soup = BeautifulSoup(data, "html.parser")
-        id = soup.find("button", class_="btn btn-danger btn-sm").get("sid").encode('utf-8')
-        dtoken = soup.find("button", class_="btn btn-danger btn-sm").get("dtoken").encode('utf-8')
+        id = soup.find("button", class_="btn btn-danger btn-sm").get("sid")
+        dtoken = soup.find("button", class_="btn btn-danger btn-sm").get("dtoken")
         url = "%s/ajax/down_ajax" % SUBHD_BASE
         data = session_get(url, id=id, referer=referer, dtoken=dtoken)
         json_response = json.loads(data)
         if json_response['success']:
-            url = json_response['url'].encode('utf-8')
+            url = json_response['url']
             if url[:4] != 'http':
                 url = '%s%s' % (SUBHD_BASE, url)
             data = session_get(url)
         else:
             msg = json_response['msg']
-            xbmc.executebuiltin((u'XBMC.Notification("subhd","%s")' % (msg)).encode('utf-8'), True)
+            xbmc.executebuiltin((u'XBMC.Notification("subhd","%s")' % (msg)), True)
             data = ''
     except:
         log(sys._getframe().f_code.co_name, "%s (%d) [%s]" % (
@@ -188,7 +184,7 @@ def Download(url,lang):
     subFile.close()
     xbmc.sleep(500)
     if data[:4] == 'Rar!' or data[:2] == 'PK':
-        archive = urllib.quote_plus(tempfile)
+        archive = urllib.parse.quote_plus(tempfile)
         if data[:4] == 'Rar!':
             path = 'rar://%s' % (archive)
         else:
@@ -197,12 +193,12 @@ def Download(url,lang):
         if ('__MACOSX') in dirs:
             dirs.remove('__MACOSX')
         if len(dirs) > 0:
-            path = path + '/' + dirs[0].decode('utf-8')
+            path = path + '/' + dirs[0]
             dirs, files = xbmcvfs.listdir(path)
         list = []
         for subfile in files:
             if (os.path.splitext( subfile )[1] in exts):
-                list.append(subfile.decode('utf-8'))
+                list.append(subfile)
         if list:
             if len(list) == 1:
                 subtitle_list.append(path + '/' + list[0])
@@ -255,14 +251,14 @@ if params['action'] == 'search' or params['action'] == 'manualsearch':
     item['episode']            = str(xbmc.getInfoLabel("VideoPlayer.Episode"))                   # Episode
     item['tvshow']             = xbmc.getInfoLabel("VideoPlayer.TVshowtitle")                    # Show
     item['title']              = xbmc.getInfoLabel("VideoPlayer.OriginalTitle")                  # try to get original title
-    item['file_original_path'] = urllib.unquote(xbmc.Player().getPlayingFile().decode('utf-8'))  # Full path of a playing file
+    item['file_original_path'] = urllib.parse.unquote(xbmc.Player().getPlayingFile())  # Full path of a playing file
     item['3let_language']      = []
 
     if 'searchstring' in params:
         item['mansearch'] = True
         item['mansearchstr'] = params['searchstring']
 
-    for lang in urllib.unquote(params['languages']).decode('utf-8').split(","):
+    for lang in urllib.parse.unquote(params['languages']).split(","):
         item['3let_language'].append(xbmc.convertLanguage(lang,xbmc.ISO_639_2))
 
     if item['title'] == "":

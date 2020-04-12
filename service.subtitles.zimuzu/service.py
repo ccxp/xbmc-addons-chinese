@@ -5,7 +5,8 @@ import os
 import sys
 import xbmc
 import urllib
-import urllib2
+import urllib.parse
+import urllib.request
 import json
 import xbmcvfs
 import requests
@@ -20,10 +21,10 @@ __scriptname__ = __addon__.getAddonInfo('name')
 __version__    = __addon__.getAddonInfo('version')
 __language__   = __addon__.getLocalizedString
 
-__cwd__        = xbmc.translatePath( __addon__.getAddonInfo('path') ).decode("utf-8")
-__profile__    = xbmc.translatePath( __addon__.getAddonInfo('profile') ).decode("utf-8")
-__resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' ) ).decode("utf-8")
-__temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') ).decode("utf-8")
+__cwd__        = xbmc.translatePath( __addon__.getAddonInfo('path') )
+__profile__    = xbmc.translatePath( __addon__.getAddonInfo('profile') )
+__resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' ) )
+__temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') )
 
 sys.path.append (__resource__)
 
@@ -39,7 +40,7 @@ ZIMUZU_API = ZIMUZU_BASE + '/search?keyword=%s&type=subtitle'
 UserAgent  = 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)'
 
 def log(module, msg):
-    xbmc.log((u"%s::%s - %s" % (__scriptname__,module,msg,)).encode('utf-8'),level=xbmc.LOGDEBUG )
+    xbmc.log((u"%s::%s - %s" % (__scriptname__,module,msg,)),level=xbmc.LOGDEBUG )
 
 def normalizeString(str):
     return str
@@ -47,12 +48,12 @@ def normalizeString(str):
 def GetHttpData(url, data=''):
     log(sys._getframe().f_code.co_name, "url [%s]" % (url))
     if data:
-        req = urllib2.Request(url, data)
+        req = urllib.request.Request(url, data)
     else:
-        req = urllib2.Request(url)
+        req = urllib.request.Request(url)
     req.add_header('User-Agent', UserAgent)
     try:
-        response = urllib2.urlopen(req)
+        response = urllib.request.urlopen(req)
         httpdata = response.read()
         response.close()
     except:
@@ -75,7 +76,7 @@ def Search( item ):
                                            int(item['episode']),)
     else:
         search_string = item['title']
-    url = ZIMUZU_API % (urllib.quote(search_string))
+    url = ZIMUZU_API % (urllib.parse.quote(search_string))
     data = GetHttpData(url)
     try:
         soup = BeautifulSoup(data, 'html.parser')
@@ -83,16 +84,16 @@ def Search( item ):
         return
     results = soup.find_all("div", class_="search-item")
     for it in results:
-        link = ZIMUZU_BASE + it.find("div", class_="fl-info").a.get('href').encode('utf-8')
-        title = it.find("strong", class_="list_title").text.encode('utf-8')
+        link = ZIMUZU_BASE + it.find("div", class_="fl-info").a.get('href')
+        title = it.find("strong", class_="list_title").text
         subtitles_list.append({"language_name":"Chinese", "filename":title, "link":link, "language_flag":'zh', "rating":"0"})
 
     if subtitles_list:
         for it in subtitles_list:
             listitem = xbmcgui.ListItem(label=it["language_name"],
                                   label2=it["filename"],
-                                  iconImage=it["rating"],
-                                  thumbnailImage=it["language_flag"]
+                                  #iconImage=it["rating"],
+                                  #thumbnailImage=it["language_flag"]
                                   )
 
             listitem.setProperty( "sync", "false" )
@@ -104,8 +105,6 @@ def Search( item ):
             xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=listitem,isFolder=False)
 
 def rmtree(path):
-    if isinstance(path, unicode):
-        path = path.encode('utf-8')
     dirs, files = xbmcvfs.listdir(path)
     for dir in dirs:
         rmtree(os.path.join(path, dir))
@@ -124,7 +123,7 @@ def Download(url):
     try:
         data = GetHttpData(url)
         soup = BeautifulSoup(data, 'html.parser')
-        url = soup.find("div", class_="subtitle-links").a.get('href').encode('utf-8')
+        url = soup.find("div", class_="subtitle-links").a.get('href')
         url = url.replace('subtitle.html', 'api/v1/static/subtitle/detail')
         data = json.loads(GetHttpData(url))
         if data['info'] != 'OK':
@@ -140,7 +139,7 @@ def Download(url):
         subFile.write(data)
 
     xbmc.sleep(500)
-    archive = urllib.quote_plus(tmpfile)
+    archive = urllib.parse.quote_plus(tmpfile)
     if data[:4] == 'Rar!':
         path = 'rar://%s' % (archive)
     else:
@@ -149,12 +148,12 @@ def Download(url):
     if ('__MACOSX') in dirs:
         dirs.remove('__MACOSX')
     if len(dirs) > 0:
-        path = path + '/' + dirs[0].decode('utf-8')
+        path = path + '/' + dirs[0]
         dirs, files = xbmcvfs.listdir(path)
     list = []
     for subfile in files:
         if (os.path.splitext( subfile )[1] in exts):
-            list.append(subfile.decode('utf-8'))
+            list.append(subfile)
     if len(list) == 1:
         subtitle_list.append(os.path.join(path, list[0]))
     elif len(list) > 1:
@@ -194,14 +193,14 @@ if params['action'] == 'search' or params['action'] == 'manualsearch':
     item['episode']            = str(xbmc.getInfoLabel("VideoPlayer.Episode"))                   # Episode
     item['tvshow']             = normalizeString(xbmc.getInfoLabel("VideoPlayer.TVshowtitle"))   # Show
     item['title']              = normalizeString(xbmc.getInfoLabel("VideoPlayer.OriginalTitle")) # try to get original title
-    item['file_original_path'] = urllib.unquote(xbmc.Player().getPlayingFile().decode('utf-8'))  # Full path of a playing file
+    item['file_original_path'] = urllib.parse.unquote(xbmc.Player().getPlayingFile())  # Full path of a playing file
     item['3let_language']      = []
 
     if 'searchstring' in params:
         item['mansearch'] = True
         item['mansearchstr'] = params['searchstring']
 
-    for lang in urllib.unquote(params['languages']).decode('utf-8').split(","):
+    for lang in urllib.parse.unquote(params['languages']).split(","):
         item['3let_language'].append(xbmc.convertLanguage(lang,xbmc.ISO_639_2))
 
     if item['title'] == "":

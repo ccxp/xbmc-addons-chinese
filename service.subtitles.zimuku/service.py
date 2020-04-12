@@ -5,7 +5,8 @@ import os
 import sys
 import xbmc
 import urllib
-import urllib2
+import urllib.parse
+import urllib.request
 import shutil
 import xbmcvfs
 import xbmcaddon
@@ -21,10 +22,10 @@ __scriptname__ = __addon__.getAddonInfo('name')
 __version__    = __addon__.getAddonInfo('version')
 __language__   = __addon__.getLocalizedString
 
-__cwd__        = xbmc.translatePath( __addon__.getAddonInfo('path') ).decode("utf-8")
-__profile__    = xbmc.translatePath( __addon__.getAddonInfo('profile') ).decode("utf-8")
-__resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' ) ).decode("utf-8")
-__temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') ).decode("utf-8")
+__cwd__        = xbmc.translatePath( __addon__.getAddonInfo('path') )
+__profile__    = xbmc.translatePath( __addon__.getAddonInfo('profile') )
+__resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' ) )
+__temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') )
 
 sys.path.append (__resource__)
 
@@ -34,10 +35,6 @@ UserAgent  = 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)'
 
 def get_KodiVersion():
     json_query = xbmc.executeJSONRPC('{ "jsonrpc": "2.0", "method": "Application.GetProperties", "params": {"properties": ["version", "name"]}, "id": 1 }')
-    if sys.version_info[0] >= 3:
-        json_query = str(json_query)
-    else:
-        json_query = unicode(json_query, 'utf-8', errors='ignore')
     json_query = json.loads(json_query)
     version_installed = []
     if 'result' in json_query and 'version' in json_query['result']:
@@ -47,7 +44,6 @@ def get_KodiVersion():
 __kodi__ = get_KodiVersion()
 
 def log(module, msg):
-    if isinstance(msg, unicode): msg = msg.encode("utf-8")
     xbmc.log("{0}::{1} - {2}".format(__scriptname__,module,msg) ,level=xbmc.LOGDEBUG )
 
 def Search( item ):
@@ -60,12 +56,12 @@ def Search( item ):
         search_str = item['tvshow']
     else:
         search_str = item['title']
-    url = ZIMUKU_API % (urllib.quote(search_str))
+    url = ZIMUKU_API % (urllib.parse.quote(search_str))
     log( sys._getframe().f_code.co_name ,"Search API url: %s" % (url))
     try:
-        req = urllib2.Request(url)
+        req = urllib.request.Request(url)
         req.add_header('User-Agent', UserAgent)
-        socket = urllib2.urlopen(req)
+        socket = urllib.request.urlopen(req)
         data = socket.read()
         socket.close()
         soup = BeautifulSoup(data, 'html.parser')
@@ -73,12 +69,12 @@ def Search( item ):
         return
     results = soup.find_all("div", class_="item prel clearfix")
     for it in results:
-        moviename = it.find("div", class_="title").a.text.encode('utf-8')
-        movieurl = '%s%s' % (ZIMUKU_BASE, it.find("div", class_="title").a.get('href').encode('utf-8'))
+        moviename = it.find("div", class_="title").a.text
+        movieurl = '%s%s' % (ZIMUKU_BASE, it.find("div", class_="title").a.get('href'))
         try:
-            req = urllib2.Request(movieurl)
+            req = urllib.request.Request(movieurl)
             req.add_header('User-Agent', UserAgent)
-            socket = urllib2.urlopen(req)
+            socket = urllib.request.urlopen(req)
             data = socket.read()
             socket.close()
             soup = BeautifulSoup(data, 'html.parser').find("div", class_="subs box clearfix")
@@ -86,12 +82,12 @@ def Search( item ):
             return
         subs = soup.tbody.find_all("tr")
         for sub in subs:
-            link = '%s%s' % (ZIMUKU_BASE, sub.a.get('href').encode('utf-8'))
-            version = sub.a.text.encode('utf-8')
+            link = '%s%s' % (ZIMUKU_BASE, sub.a.get('href'))
+            version = sub.a.text
             try:
                 td = sub.find("td", class_="tac lang")
                 r2 = td.find_all("img")
-                langs = [x.get('title').encode('utf-8') for x in r2]
+                langs = [x.get('title') for x in r2]
             except:
                 langs = '未知'
             name = '%s (%s)' % (version, ",".join(langs))
@@ -104,8 +100,8 @@ def Search( item ):
         for it in subtitles_list:
             listitem = xbmcgui.ListItem(label=it["language_name"],
                                   label2=it["filename"],
-                                  iconImage=it["rating"],
-                                  thumbnailImage=it["language_flag"]
+                                  #iconImage=it["rating"],
+                                  #thumbnailImage=it["language_flag"]
                                   )
 
             listitem.setProperty( "sync", "false" )
@@ -119,15 +115,15 @@ def Search( item ):
 
 def DownloadLinks(links, referer):
     for link in links:
-        url = link.get('href').encode('utf-8')
+        url = link.get('href')
         if url[:4] != 'http':
             url = ZIMUKU_BASE + url
         try:
             log( sys._getframe().f_code.co_name ,"Download url: %s" % (url))
-            req = urllib2.Request(url)
+            req = urllib.request.Request(url)
             req.add_header('User-Agent', UserAgent)
             req.add_header('Referer', referer)
-            socket = urllib2.urlopen(req)
+            socket = urllib.request.urlopen(req)
             filename = socket.headers['Content-Disposition'].split('filename=')[1]
             if filename[0] == '"' or filename[0] == "'":
                 filename = filename[1:-1]
@@ -137,7 +133,7 @@ def DownloadLinks(links, referer):
                 return filename, data
             else:
                 return '', ''
-        except Exception, e:
+        except Exception as e:
             log(sys._getframe().f_code.co_name, "Failed to access %s" % (url))
     return '', ''
 
@@ -146,24 +142,24 @@ def Download(url,lang):
         xbmcvfs.mkdirs(__temp__)
     dirs, files = xbmcvfs.listdir(__temp__)
     for file in files:
-        xbmcvfs.delete(os.path.join(__temp__, file.decode('utf-8')))
+        xbmcvfs.delete(os.path.join(__temp__, file))
 
     subtitle_list = []
     exts = [".srt", ".sub", ".smi", ".ssa", ".ass" ]
     log( sys._getframe().f_code.co_name ,"Download page: %s" % (url))
     try:
-        req = urllib2.Request(url)
+        req = urllib.request.Request(url)
         req.add_header('User-Agent', UserAgent)
-        socket = urllib2.urlopen(req)
+        socket = urllib.request.urlopen(req)
         data = socket.read()
         soup = BeautifulSoup(data, 'html.parser')
-        url = soup.find("li", class_="dlsub").a.get('href').encode('utf-8')
+        url = soup.find("li", class_="dlsub").a.get('href')
         if url[:4] != 'http':
             url = ZIMUKU_BASE + url
         log( sys._getframe().f_code.co_name ,"Download links: %s" % (url))
-        req = urllib2.Request(url)
+        req = urllib.request.Request(url)
         req.add_header('User-Agent', UserAgent)
-        socket = urllib2.urlopen(req)
+        socket = urllib.request.urlopen(req)
         data = socket.read()
         socket.close()
         soup = BeautifulSoup(data, 'html.parser')
@@ -185,7 +181,7 @@ def Download(url,lang):
     subFile.close()
     xbmc.sleep(500)
     if data[:4] == 'Rar!' or data[:2] == 'PK':
-        archive = urllib.quote_plus(tempfile)
+        archive = urllib.parse.quote_plus(tempfile)
         if data[:4] == 'Rar!':
             path = 'rar://%s' % (archive)
         else:
@@ -194,12 +190,12 @@ def Download(url,lang):
         if ('__MACOSX') in dirs:
             dirs.remove('__MACOSX')
         if len(dirs) > 0:
-            path = path + '/' + dirs[0].decode('utf-8')
+            path = path + '/' + dirs[0]
             dirs, files = xbmcvfs.listdir(path)
         list = []
         for subfile in files:
             if (os.path.splitext( subfile )[1] in exts):
-                list.append(subfile.decode('utf-8'))
+                list.append(subfile)
         if list:
             if len(list) == 1:
                 subtitle_list.append(path + '/' + list[0])
@@ -252,14 +248,14 @@ if params['action'] == 'search' or params['action'] == 'manualsearch':
     item['episode']            = str(xbmc.getInfoLabel("VideoPlayer.Episode"))                   # Episode
     item['tvshow']             = xbmc.getInfoLabel("VideoPlayer.TVshowtitle")   # Show
     item['title']              = xbmc.getInfoLabel("VideoPlayer.OriginalTitle") # try to get original title
-    item['file_original_path'] = urllib.unquote(xbmc.Player().getPlayingFile().decode('utf-8'))  # Full path of a playing file
+    item['file_original_path'] = urllib.parse.unquote(xbmc.Player().getPlayingFile())  # Full path of a playing file
     item['3let_language']      = []
 
     if 'searchstring' in params:
         item['mansearch'] = True
         item['mansearchstr'] = params['searchstring']
 
-    for lang in urllib.unquote(params['languages']).decode('utf-8').split(","):
+    for lang in urllib.parse.unquote(params['languages']).split(","):
         item['3let_language'].append(xbmc.convertLanguage(lang,xbmc.ISO_639_2))
 
     if item['title'] == "":
