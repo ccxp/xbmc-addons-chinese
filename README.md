@@ -1,3 +1,5 @@
+# 修改为支持kodi 19（只改了字幕插件）
+
 # Introduction
 
 This project is an repository for open source Addon scripts, plugins, and skins for XBMC Media Center. Specially for Chinese Language speaking people.
